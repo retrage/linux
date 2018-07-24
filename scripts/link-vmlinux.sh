@@ -255,10 +255,10 @@ ${MAKE} -f "${srctree}/scripts/Makefile.build" obj=init
 archive_builtin
 
 info CLEAN obj
-python "${srctree}/clean-obj.py"
+python "${srctree}/tools/lkl/js/clean-obj.py"
 
 info GEN link-vmlinux.sh
-python "${srctree}/link-vmlinux-gen.py"
+python "${srctree}/tools/lkl/js/link-vmlinux-gen.py"
 
 info LINK vmlinux
 bash "${srctree}/link-vmlinux.sh"

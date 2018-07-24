@@ -36,8 +36,8 @@ $DIS -o js/libc.ll js/libc.bc
 echo "DIS pthreads.bc"
 $DIS -o js/pthreads.ll js/pthreads.bc
 echo "PY rename_symbols.py"
-$PY rename_symbols.py $LKL/tests/boot.ll $LKL/tests/boot-mod.ll
+$PY $LKL/js/rename_symbols.py $LKL/tests/boot.ll $LKL/tests/boot-mod.ll
 echo "EMCC boot.js"
 EMCC_DEBUG=1 $CC -o js/boot.html $LKL/tests/boot-mod.ll $CFLAGS -v
 echo "PY fix-js.py"
-$PY fix-js.py js/boot.js js/boot.js
+$PY $LKL/js/fix-js.py js/boot.js js/boot.js

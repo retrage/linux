@@ -36,7 +36,7 @@ $DIS -o js/libc.ll js/libc.bc
 echo "DIS pthreads.bc"
 $DIS -o js/pthreads.ll js/pthreads.bc
 echo "PY rename_symbols.py"
-$PY rename_symbols.py $LKL/lib/liblkl.ll $LKL/lib/liblkl-mod.ll
+$PY $LKL/js/rename_symbols.py $LKL/lib/liblkl.ll $LKL/lib/liblkl-mod.ll
 
 EX_FUNCS="$(grep "@lkl_" $LKL/lib/liblkl-mod.ll \
     | grep "define" | grep -v "internal" \
@@ -46,4 +46,4 @@ CFLAGS="$CFLAGS -s EXPORTED_FUNCTIONS=$EX_FUNCS"
 echo "EMCC liblkl.js"
 EMCC_DEBUG=1 $CC -o js/liblkl.js $LKL/lib/liblkl-mod.ll $CFLAGS -v
 echo "PY fix-js.py"
-$PY fix-js.py js/liblkl.js js/liblkl.js
+$PY $LKL/js/fix-js.py js/liblkl.js js/liblkl.js
