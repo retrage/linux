@@ -311,6 +311,10 @@ int main(int argc, const char **argv)
 
 	lkl_host_ops.print = lkl_test_log;
 
+#ifdef __FIBER__
+        lkl_thread_init();
+#endif
+
 	return lkl_test_run(tests, sizeof(tests)/sizeof(struct lkl_test),
 			    "net %s", backends[cla.backend]);
 }

@@ -28,6 +28,10 @@ struct iovec {
 };
 #endif
 
+#ifdef __FIBER__
+void lkl_thread_init(void);
+#endif
+
 extern struct lkl_dev_blk_ops lkl_dev_blk_ops;
 
 /**

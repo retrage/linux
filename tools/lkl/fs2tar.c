@@ -367,6 +367,10 @@ int main(int argc, char **argv)
 	}
 	disk_id = ret;
 
+#ifdef __FIBER__
+        lkl_thread_init();
+#endif
+
 	lkl_start_kernel(&lkl_host_ops, "mem=10M");
 
 	ret = lkl_mount_dev(disk_id, cla.part, cla.fsimg_type, LKL_MS_RDONLY,

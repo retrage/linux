@@ -620,6 +620,10 @@ int main(int argc, char **argv)
 		goto out_fuse_destroy;
 	}
 
+#ifdef __FIBER__
+        lkl_thread_init();
+#endif
+
 	ret = start_lkl();
 	if (ret) {
 		ret = -1;
