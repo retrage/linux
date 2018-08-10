@@ -336,13 +336,7 @@ void lkl_thread_init(void)
 static lkl_thread_t lkl_thread_create(void (*fn)(void *), void *arg)
 {
 #ifdef __FIBER__
-        thread_t *thread = thread_create("lkl", (int (*)(void *))fn, arg, DEFAULT_PRIORITY, 2*1024*1024);
-        if (!thread) {
-                return 0;
-        } else {
-                thread_resume(thread);
-                return (lkl_thread_t) thread;
-        }
+        return 0;
 #else
 	pthread_t thread;
 	if (WARN_PTHREAD(pthread_create(&thread, NULL, (void* (*)(void *))fn, arg)))
@@ -355,7 +349,6 @@ static lkl_thread_t lkl_thread_create(void (*fn)(void *), void *arg)
 static void lkl_thread_detach(void)
 {
 #ifdef __FIBER__
-        thread_detach(get_current_thread());
 #else
 	WARN_PTHREAD(pthread_detach(pthread_self()));
 #endif /* __FIBER__ */
@@ -364,7 +357,6 @@ static void lkl_thread_detach(void)
 static void lkl_thread_exit(void)
 {
 #ifdef __FIBER__
-        thread_exit(0);
 #else
 	pthread_exit(NULL);
 #endif /* __FIBER__ */
@@ -373,19 +365,19 @@ static void lkl_thread_exit(void)
 static int lkl_thread_join(lkl_thread_t tid)
 {
 #ifdef __FIBER__
-        if (thread_join((thread_t *)tid, NULL, INFINITE_TIME))
+        return 0;
 #else
 	if (WARN_PTHREAD(pthread_join((pthread_t)tid, NULL)))
-#endif /* __FIBER__ */
 		return -1;
 	else
 		return 0;
+#endif /* __FIBER__ */
 }
 
 static lkl_thread_t lkl_thread_self(void)
 {
 #ifdef __FIBER__
-        return (lkl_thread_t)get_current_thread();
+        return NULL;
 #else
 	return (lkl_thread_t)pthread_self();
 #endif /* __FIBER__ */
@@ -394,7 +386,7 @@ static lkl_thread_t lkl_thread_self(void)
 static int lkl_thread_equal(lkl_thread_t a, lkl_thread_t b)
 {
 #ifdef __FIBER__
-        return a==b;
+        return 0;
 #else
 	return pthread_equal((pthread_t)a, (pthread_t)b);
 #endif /* __FIBER__ */
