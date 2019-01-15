@@ -15,11 +15,11 @@ config LKL
        select HAS_DMA
        select DMA_DIRECT_OPS
        select PHYS_ADDR_T_64BIT if 64BIT
-       select 64BIT if OUTPUT_FORMAT = "elf64-x86-64"
-	   select 64BIT if OUTPUT_FORMAT = "pe-x86-64"
-       select HAVE_UNDERSCORE_SYMBOL_PREFIX if OUTPUT_FORMAT = "pe-i386"
-       select 64BIT if OUTPUT_FORMAT = "elf64-x86-64-freebsd"
-       select 64BIT if OUTPUT_FORMAT = "elf64-littleaarch64"
+       select 64BIT if "$(OUTPUT_FORMAT)" = "elf64-x86-64"
+       select 64BIT if "$(OUTPUT_FORMAT)" = "pe-x86-64"
+       select HAVE_UNDERSCORE_SYMBOL_PREFIX if "$(OUTPUT_FORMAT)" = "pe-i386"
+       select 64BIT if "$(OUTPUT_FORMAT)" = "elf64-x86-64-freebsd"
+       select 64BIT if "$(OUTPUT_FORMAT)" = "elf64-littleaarch64"
        select NET
        select MULTIUSER
        select INET
@@ -41,18 +41,17 @@ config LKL
        select IPV6_ADVANCED_ROUTER
        select ARCH_NO_COHERENT_DMA_MMAP
 
-config OUTPUTFORMAT
-       string
-       option env="OUTPUT_FORMAT"
-
 config OUTPUT_FORMAT
        string "Output format"
-       default OUTPUTFORMAT
+       default "$(OUTPUT_FORMAT)"
 
 config ARCH_DMA_ADDR_T_64BIT
        def_bool 64BIT
 
 config 64BIT
+       def_bool n
+
+config COREDUMP
        def_bool n
 
 config BIG_ENDIAN
@@ -71,27 +70,25 @@ config RWSEM_GENERIC_SPINLOCK
 	bool
 	default y
 
-source init/Kconfig
+config HAVE_UNDERSCORE_SYMBOL_PREFIX
+       bool
+       help
+         Some architectures generate an _ in front of C symbols; things like
+         module loading and assembly files need to know about this.
 
-source net/Kconfig
+config HZ
+        int
+        default 100
 
-source drivers/Kconfig
+config CONSOLE_LOGLEVEL_QUIET
+	int "quiet console loglevel (1-15)"
+	range 1 15
+	default "4"
+	help
+	  loglevel to use when "quiet" is passed on the kernel commandline.
 
-source fs/Kconfig
+	  When "quiet" is passed on the kernel commandline this loglevel
+	  will be used as the loglevel. IOW passing "quiet" will be the
+	  equivalent of passing "loglevel=<CONSOLE_LOGLEVEL_QUIET>"
 
-source mm/Kconfig
-
-source kernel/Kconfig.preempt
-
-source kernel/Kconfig.locks
-
-source kernel/Kconfig.hz
-
-source security/Kconfig
-
-source crypto/Kconfig
-
-source lib/Kconfig
-
-source lib/Kconfig.debug
 

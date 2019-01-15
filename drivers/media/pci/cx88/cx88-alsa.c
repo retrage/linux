@@ -298,7 +298,7 @@ static int cx88_alsa_dma_init(struct cx88_audio_dev *chip, int nr_pages)
 	memset(buf->vaddr, 0, nr_pages << PAGE_SHIFT);
 	buf->nr_pages = nr_pages;
 
-	buf->sglist = vzalloc(buf->nr_pages * sizeof(*buf->sglist));
+	buf->sglist = vzalloc(array_size(sizeof(*buf->sglist), buf->nr_pages));
 	if (!buf->sglist)
 		goto vzalloc_err;
 
@@ -962,8 +962,11 @@ static int cx88_audio_initdev(struct pci_dev *pci,
 		goto error;
 
 	/* If there's a wm8775 then add a Line-In ALC switch */
-	if (core->sd_wm8775)
-		snd_ctl_add(card, snd_ctl_new1(&snd_cx88_alc_switch, chip));
+	if (core->sd_wm8775) {
+		err = snd_ctl_add(card, snd_ctl_new1(&snd_cx88_alc_switch, chip));
+		if (err < 0)
+			goto error;
+	}
 
 	strcpy(card->driver, "CX88x");
 	sprintf(card->shortname, "Conexant CX%x", pci->device);

@@ -520,7 +520,8 @@ static int multipath_clone_and_map(struct dm_target *ti, struct request *rq,
 
 	bdev = pgpath->path.dev->bdev;
 	q = bdev_get_queue(bdev);
-	clone = blk_get_request(q, rq->cmd_flags | REQ_NOMERGE, GFP_ATOMIC);
+	clone = blk_get_request(q, rq->cmd_flags | REQ_NOMERGE,
+			BLK_MQ_REQ_NOWAIT);
 	if (IS_ERR(clone)) {
 		/* EBUSY, ENODEV or EWOULDBLOCK: requeue */
 		if (blk_queue_dying(q)) {
@@ -805,19 +806,19 @@ static int parse_path_selector(struct dm_arg_set *as, struct priority_group *pg,
 }
 
 static int setup_scsi_dh(struct block_device *bdev, struct multipath *m,
-			 const char *attached_handler_name, char **error)
+			 const char **attached_handler_name, char **error)
 {
 	struct request_queue *q = bdev_get_queue(bdev);
 	int r;
 
 	if (test_bit(MPATHF_RETAIN_ATTACHED_HW_HANDLER, &m->flags)) {
 retain:
-		if (attached_handler_name) {
+		if (*attached_handler_name) {
 			/*
 			 * Clear any hw_handler_params associated with a
 			 * handler that isn't already attached.
 			 */
-			if (m->hw_handler_name && strcmp(attached_handler_name, m->hw_handler_name)) {
+			if (m->hw_handler_name && strcmp(*attached_handler_name, m->hw_handler_name)) {
 				kfree(m->hw_handler_params);
 				m->hw_handler_params = NULL;
 			}
@@ -829,7 +830,8 @@ retain:
 			 * handler instead of the original table passed in.
 			 */
 			kfree(m->hw_handler_name);
-			m->hw_handler_name = attached_handler_name;
+			m->hw_handler_name = *attached_handler_name;
+			*attached_handler_name = NULL;
 		}
 	}
 
@@ -866,7 +868,7 @@ static struct pgpath *parse_path(struct dm_arg_set *as, struct path_selector *ps
 	struct pgpath *p;
 	struct multipath *m = ti->private;
 	struct request_queue *q;
-	const char *attached_handler_name;
+	const char *attached_handler_name = NULL;
 
 	/* we need at least a path arg */
 	if (as->argc < 1) {
@@ -889,7 +891,7 @@ static struct pgpath *parse_path(struct dm_arg_set *as, struct path_selector *ps
 	attached_handler_name = scsi_dh_attached_handler_name(q, GFP_KERNEL);
 	if (attached_handler_name || m->hw_handler_name) {
 		INIT_DELAYED_WORK(&p->activate_path, activate_path_work);
-		r = setup_scsi_dh(p->path.dev->bdev, m, attached_handler_name, &ti->error);
+		r = setup_scsi_dh(p->path.dev->bdev, m, &attached_handler_name, &ti->error);
 		if (r) {
 			dm_put_device(ti, p->path.dev);
 			goto bad;
@@ -904,6 +906,7 @@ static struct pgpath *parse_path(struct dm_arg_set *as, struct path_selector *ps
 
 	return p;
  bad:
+	kfree(attached_handler_name);
 	free_pgpath(p);
 	return ERR_PTR(r);
 }

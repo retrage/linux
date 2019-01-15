@@ -2,6 +2,7 @@
  * Common logic shared by IPv4 [ipmr] and IPv6 [ip6mr] implementation
  */
 
+#include <linux/rhashtable.h>
 #include <linux/mroute_base.h>
 
 /* Sets everything common except 'dev', since that is done under locking */
@@ -35,17 +36,19 @@ mr_table_alloc(struct net *net, u32 id,
 				 struct net *net))
 {
 	struct mr_table *mrt;
+	int err;
 
 	mrt = kzalloc(sizeof(*mrt), GFP_KERNEL);
 	if (!mrt)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 	mrt->id = id;
 	write_pnet(&mrt->net, net);
 
 	mrt->ops = *ops;
-	if (rhltable_init(&mrt->mfc_hash, mrt->ops.rht_params)) {
+	err = rhltable_init(&mrt->mfc_hash, mrt->ops.rht_params);
+	if (err) {
 		kfree(mrt);
-		return NULL;
+		return ERR_PTR(err);
 	}
 	INIT_LIST_HEAD(&mrt->mfc_cache_list);
 	INIT_LIST_HEAD(&mrt->mfc_unres_queue);
@@ -293,8 +296,6 @@ int mr_rtm_dumproute(struct sk_buff *skb, struct netlink_callback *cb,
 next_entry:
 			e++;
 		}
-		e = 0;
-		s_e = 0;
 
 		spin_lock_bh(lock);
 		list_for_each_entry(mfc, &mrt->mfc_unres_queue, list) {

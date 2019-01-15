@@ -19,11 +19,12 @@ static int __gup_benchmark_ioctl(unsigned int cmd,
 		struct gup_benchmark *gup)
 {
 	ktime_t start_time, end_time;
-	unsigned long i, nr, nr_pages, addr, next;
+	unsigned long i, nr_pages, addr, next;
+	int nr;
 	struct page **pages;
 
 	nr_pages = gup->size / PAGE_SIZE;
-	pages = kvzalloc(sizeof(void *) * nr_pages, GFP_KERNEL);
+	pages = kvcalloc(nr_pages, sizeof(void *), GFP_KERNEL);
 	if (!pages)
 		return -ENOMEM;
 

@@ -170,6 +170,7 @@ struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
 	struct rb_node  r_node;
 	struct rb_node  r_mc_node;          /* map check */
+	struct work_struct r_complete_work;
 	struct ceph_osd *r_osd;
 
 	struct ceph_osd_request_target r_t;
@@ -198,10 +199,9 @@ struct ceph_osd_request {
 	/* set by submitter */
 	u64 r_snapid;                         /* for reads, CEPH_NOSNAP o/w */
 	struct ceph_snap_context *r_snapc;    /* for writes */
-	struct timespec r_mtime;              /* ditto */
+	struct timespec64 r_mtime;            /* ditto */
 	u64 r_data_offset;                    /* ditto */
 	bool r_linger;                        /* don't resend on failure */
-	bool r_abort_on_full;		      /* return ENOSPC when full */
 
 	/* internal */
 	unsigned long r_stamp;                /* jiffies, send or check time */
@@ -253,7 +253,7 @@ struct ceph_osd_linger_request {
 	struct ceph_osd_request_target t;
 	u32 map_dne_bound;
 
-	struct timespec mtime;
+	struct timespec64 mtime;
 
 	struct kref kref;
 	struct mutex lock;
@@ -347,6 +347,8 @@ struct ceph_osd_client {
 	struct rb_root         linger_map_checks;
 	atomic_t               num_requests;
 	atomic_t               num_homeless;
+	bool                   abort_on_full; /* abort w/ ENOSPC when full */
+	int                    abort_err;
 	struct delayed_work    timeout_work;
 	struct delayed_work    osds_timeout_work;
 #ifdef CONFIG_DEBUG_FS
@@ -359,6 +361,7 @@ struct ceph_osd_client {
 	struct ceph_msgpool	msgpool_op_reply;
 
 	struct workqueue_struct	*notify_wq;
+	struct workqueue_struct	*completion_wq;
 };
 
 static inline bool ceph_osdmap_flag(struct ceph_osd_client *osdc, int flag)
@@ -378,6 +381,7 @@ extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,
 				 struct ceph_msg *msg);
 void ceph_osdc_update_epoch_barrier(struct ceph_osd_client *osdc, u32 eb);
+void ceph_osdc_abort_requests(struct ceph_osd_client *osdc, int err);
 
 extern void osd_req_op_init(struct ceph_osd_request *osd_req,
 			    unsigned int which, u16 opcode, u32 flags);
@@ -440,7 +444,7 @@ extern void osd_req_op_cls_response_data_pages(struct ceph_osd_request *,
 					struct page **pages, u64 length,
 					u32 alignment, bool pages_from_pool,
 					bool own_pages);
-extern void osd_req_op_cls_init(struct ceph_osd_request *osd_req,
+extern int osd_req_op_cls_init(struct ceph_osd_request *osd_req,
 					unsigned int which, u16 opcode,
 					const char *class, const char *method);
 extern int osd_req_op_xattr_init(struct ceph_osd_request *osd_req, unsigned int which,
@@ -504,7 +508,7 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_snap_context *sc,
 				u64 off, u64 len,
 				u32 truncate_seq, u64 truncate_size,
-				struct timespec *mtime,
+				struct timespec64 *mtime,
 				struct page **pages, int nr_pages);
 
 /* watch/notify */
@@ -524,12 +528,12 @@ int ceph_osdc_notify_ack(struct ceph_osd_client *osdc,
 			 u64 notify_id,
 			 u64 cookie,
 			 void *payload,
-			 size_t payload_len);
+			 u32 payload_len);
 int ceph_osdc_notify(struct ceph_osd_client *osdc,
 		     struct ceph_object_id *oid,
 		     struct ceph_object_locator *oloc,
 		     void *payload,
-		     size_t payload_len,
+		     u32 payload_len,
 		     u32 timeout,
 		     struct page ***preply_pages,
 		     size_t *preply_len);

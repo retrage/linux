@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Cherryview/Braswell pinctrl driver
  *
@@ -7,10 +8,6 @@
  * This driver is based on the original Cherryview GPIO driver by
  *   Ning Li <ning.li@intel.com>
  *   Alan Cox <alan@linux.intel.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/dmi.h>
@@ -1527,6 +1524,7 @@ static const struct dmi_system_id chv_no_valid_mask[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "Intel_Strago"),
+			DMI_MATCH(DMI_BOARD_VERSION, "1.0"),
 		},
 	},
 	{
@@ -1534,6 +1532,7 @@ static const struct dmi_system_id chv_no_valid_mask[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Setzer"),
+			DMI_MATCH(DMI_BOARD_VERSION, "1.0"),
 		},
 	},
 	{
@@ -1541,6 +1540,7 @@ static const struct dmi_system_id chv_no_valid_mask[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Cyan"),
+			DMI_MATCH(DMI_BOARD_VERSION, "1.0"),
 		},
 	},
 	{
@@ -1548,6 +1548,7 @@ static const struct dmi_system_id chv_no_valid_mask[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "GOOGLE"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "Celes"),
+			DMI_MATCH(DMI_BOARD_VERSION, "1.0"),
 		},
 	},
 	{}
