@@ -280,10 +280,12 @@ static struct sigevent sigevp;
 static struct itimerspec ispec;
 static timer_t timerid = 0;
 static volatile lk_time_t ticks = 0;
+#define LK_INTERVAL 10000000
+#define LK_SEC (1000 * 1000 * 1000)
 
 static void lkl_timer_callback(int signum, siginfo_t *info, void *ctx)
 {
-        ticks += 10;
+        ticks += LK_INTERVAL;
         if (thread_timer_tick()==INT_RESCHEDULE)
                 thread_preempt();
 }
@@ -321,8 +323,8 @@ void lkl_thread_init(void)
                 exit(1);
         }
 
-        ispec.it_interval.tv_sec = 0;
-        ispec.it_interval.tv_nsec = 10;
+        ispec.it_interval.tv_sec = LK_INTERVAL / LK_SEC;
+        ispec.it_interval.tv_nsec = LK_INTERVAL % LK_SEC;
         ispec.it_value.tv_sec = 0;
         ispec.it_value.tv_nsec = 0;
         if (timer_settime(timerid, 0, &ispec, NULL) < 0) {
