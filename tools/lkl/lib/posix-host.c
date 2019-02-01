@@ -322,7 +322,7 @@ void lkl_thread_init(void)
         }
 
         ispec.it_interval.tv_sec = 0;
-        ispec.it_interval.tv_nsec = 10000000;
+        ispec.it_interval.tv_nsec = 10;
         ispec.it_value.tv_sec = 0;
         ispec.it_value.tv_nsec = 0;
         if (timer_settime(timerid, 0, &ispec, NULL) < 0) {

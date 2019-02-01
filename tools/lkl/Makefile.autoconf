@@ -28,6 +28,7 @@ endef
 define fiber
   $(call set_autoconf_var,FIBER,y)
   CFLAGS += -D__FIBER__
+  LDLIBS += -lrt
 endef
 
 define virtio_net_dpdk
