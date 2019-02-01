@@ -522,7 +522,7 @@ struct lkl_test tests[] = {
 	LKL_TEST(fstat),
 	LKL_TEST(mkdir),
 	LKL_TEST(stat),
-#if !(defined(__MINGW32__) || defined(__FIBER__))
+#ifndef __MINGW32__
 	LKL_TEST(nanosleep),
 #endif
 	LKL_TEST(pipe2),
@@ -536,9 +536,7 @@ struct lkl_test tests[] = {
 	LKL_TEST(umount_fs_proc),
 	LKL_TEST(lo_ifup),
 	LKL_TEST(gettid),
-#ifndef __FIBER__
 	LKL_TEST(syscall_thread),
-#endif
 	/*
 	 * Wine has an issue where the FlsCallback is not called when
 	 * the thread terminates which makes testing the automatic
