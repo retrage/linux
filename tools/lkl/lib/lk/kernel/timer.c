@@ -93,7 +93,8 @@ static void timer_set(lk_timer_t *timer, lk_time_t delay, lk_time_t period, time
     DEBUG_ASSERT(timer->magic == TIMER_MAGIC);
 
     if (list_in_list(&timer->node)) {
-        panic("timer %p already in list\n", timer);
+        LTRACEF("timer %p already in list\n", timer);
+        return;
     }
 
     now = current_time();
