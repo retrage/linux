@@ -12,3 +12,4 @@ Makefile.conf
 include/lkl_autoconf.h
 tests/autoconf.sh
 *.pyc
+tests/syscall_thread

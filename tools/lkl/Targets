@@ -22,4 +22,4 @@ LDLIBS_cptofs-$(LKL_HOST_CONFIG_NEEDS_LARGP) += -largp
 progs-y += tests/boot
 progs-y += tests/disk
 progs-y += tests/net-test
-
+progs-y += tests/syscall_thread
