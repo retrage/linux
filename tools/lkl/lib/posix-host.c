@@ -1,9 +1,12 @@
 #ifdef __FIBER__
+#include <lk/err.h>
 #include <lk/kernel/semaphore.h>
 #include <lk/kernel/mutex.h>
 #include <lk/kernel/thread.h>
 #include <lk/kernel/event.h>
 #include <lk/kernel/timer.h>
+#include <lk/platform.h>
+#include <lk/platform/timer.h>
 #else
 #include <pthread.h>
 #endif
@@ -279,29 +282,63 @@ static struct sigaction sigact;
 static struct sigevent sigevp;
 static struct itimerspec ispec;
 static timer_t timerid = 0;
-static volatile lk_time_t ticks = 0;
 #define LK_INTERVAL 10000000
 #define LK_SEC (1000 * 1000 * 1000)
+#define LK_MSEC (1000 * 1000)
+static platform_timer_callback t_callback;
+static void *callback_arg;
+
+static uint64_t next_trigger_time;
+static uint64_t next_trigger_delta;
+
+static uint64_t timer_delta_time;
+static volatile uint64_t timer_current_time;
+
+status_t platform_set_periodic_timer(platform_timer_callback callback, void *arg, lk_time_t interval)
+{
+  t_callback = callback;
+  callback_arg = arg;
+
+  next_trigger_delta = (uint64_t)interval;
+  next_trigger_time = timer_current_time + next_trigger_delta;
+
+  return NO_ERROR;
+}
 
 static void lkl_timer_callback(int signum, siginfo_t *info, void *ctx)
 {
-        ticks += LK_INTERVAL;
-        if (thread_timer_tick()==INT_RESCHEDULE)
-                thread_preempt();
+  uint64_t delta;
+
+  timer_current_time += timer_delta_time;
+
+  lk_time_t time = current_time();
+
+  if (t_callback && timer_current_time >= next_trigger_time) {
+    delta = timer_current_time - next_trigger_time;
+    next_trigger_time = timer_current_time + next_trigger_delta - delta;
+    if (t_callback(callback_arg, time) == INT_RESCHEDULE)
+      thread_preempt();
+  }
 }
 
 lk_time_t current_time(void)
 {
-        return ticks;
+        return (lk_time_t)timer_current_time;
 }
 
 lk_bigtime_t current_time_hires(void)
 {
-        return (lk_bigtime_t)ticks * 1000;
+  lk_bigtime_t time;
+
+  time = (lk_bigtime_t)timer_current_time * 1000;
+
+  return time;
 }
 
 void lkl_thread_init(void)
 {
+	timer_current_time = 0;
+        timer_delta_time = LK_INTERVAL / LK_MSEC;
         thread_init_early();
         thread_init();
         timer_init();
@@ -458,20 +495,75 @@ static unsigned long long time_ns(void)
 #endif /* __FIBER__ */
 }
 
+#ifdef __FIBER__
+typedef struct {
+  lk_timer_t *timer;
+  void (*fn)(void *);
+  void *arg;
+  event_t cond;
+  thread_t *thread;
+  int request_stop;
+} lkl_lk_timer_t;
+
+static enum handler_return lktimer_callback(struct timer *_timer, lk_time_t now, void *arg)
+{
+  lkl_lk_timer_t *timer = arg;
+  event_signal(&timer->cond, 1);
+
+  return INT_RESCHEDULE;
+}
+
+static int timer_thread(void *arg)
+{
+  lkl_lk_timer_t *timer = arg;
+
+  while (!timer->request_stop) {
+    event_wait(&timer->cond);
+    if (timer->request_stop)
+      break;
+    timer->fn(timer->arg);
+  }
+
+  event_destroy(&timer->cond);
+  free(timer);
+
+  return 0;
+}
+#endif
+
 static void *lkl_timer_alloc(void (*fn)(void *), void *arg)
 {
 #ifdef __FIBER__
-        lk_timer_t *timer = malloc(sizeof(lk_timer_t));
+        lkl_lk_timer_t *timer = malloc(sizeof(lkl_lk_timer_t));
 
         if (!timer) {
                 lkl_printf("malloc: %s\n", strerror(errno));
                 return NULL;
         }
 
-        timer_initialize(timer);
+        timer->timer = malloc(sizeof(lk_timer_t));
 
-        timer->callback = fn;
+        if (!timer->timer) {
+          lkl_printf("malloc: %s\n", strerror(errno));
+          return NULL;
+        }
+
+        timer_initialize(timer->timer);
+        timer->timer->callback = lktimer_callback;
+        timer->timer->arg = timer;
+
+        timer->fn = fn;
         timer->arg = arg;
+        timer->request_stop = 0;
+        event_init(&timer->cond, 0, EVENT_FLAG_AUTOUNSIGNAL);
+
+        timer->thread = thread_create("timer", timer_thread, timer, DEFAULT_PRIORITY, 1*1024*1024);
+        if (!timer->thread) {
+          lkl_printf("malloc: %s\n", strerror(errno));
+          return NULL;
+        }
+
+        thread_detach_and_resume(timer->thread);
 
         return (void *)timer;
 #else
@@ -496,8 +588,8 @@ static void *lkl_timer_alloc(void (*fn)(void *), void *arg)
 static int lkl_timer_set_oneshot(void *_timer, unsigned long ns)
 {
 #ifdef __FIBER__
-        lk_timer_t *timer = _timer;
-        lk_time_t delay = ns / 1000000;
+        lk_timer_t *timer = ((lkl_lk_timer_t *)_timer)->timer;
+        lk_time_t delay = ns / LK_MSEC;
 
         timer_set_oneshot(timer, delay, timer->callback, timer->arg);
 
@@ -518,9 +610,12 @@ static int lkl_timer_set_oneshot(void *_timer, unsigned long ns)
 static void lkl_timer_free(void *_timer)
 {
 #ifdef __FIBER__
-        lk_timer_t *timer = _timer;
+	lkl_lk_timer_t *timer = _timer;
 
-        timer_cancel(timer);
+        timer_cancel(timer->timer);
+
+        timer->request_stop = 1;
+        event_signal(&timer->cond, 1);
 #else
 	timer_t timer = (timer_t)(long)_timer;
 

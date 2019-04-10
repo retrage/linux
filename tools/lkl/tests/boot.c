@@ -522,8 +522,10 @@ struct lkl_test tests[] = {
 	LKL_TEST(fstat),
 	LKL_TEST(mkdir),
 	LKL_TEST(stat),
+#if 0
 #ifndef __MINGW32__
 	LKL_TEST(nanosleep),
+#endif
 #endif
 	LKL_TEST(pipe2),
 	LKL_TEST(epoll),
