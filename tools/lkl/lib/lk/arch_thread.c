@@ -42,7 +42,7 @@ void arch_context_switch(struct thread *oldthread, struct thread *newthread) {
 }
 
 void arch_idle(void) {
-    thread_preempt();
+    //thread_preempt();
 }
 
 void arch_dump_thread(thread_t *t) {
