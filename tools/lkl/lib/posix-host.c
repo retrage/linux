@@ -286,15 +286,11 @@ static void lkl_mutex_free(struct lkl_mutex *_mutex)
  * Most of the code comes from
  * http://linux-biyori.sakura.ne.jp/program/pr_signal02.php
  */
-static struct sigaction sigact;
-static struct sigevent sigevp;
-static struct itimerspec ispec;
-static timer_t timerid = 0;
 static volatile lk_time_t ticks = 0;
-#define LK_INTERVAL 10000000
+#define LK_INTERVAL (10)
 #define LK_SEC (1000 * 1000 * 1000)
 
-static void lkl_timer_callback(int signum, siginfo_t *info, void *ctx)
+static void lkl_timer_callback(union sigval sv)
 {
         ticks += LK_INTERVAL;
         if (thread_timer_tick()==INT_RESCHEDULE)
@@ -303,45 +299,36 @@ static void lkl_timer_callback(int signum, siginfo_t *info, void *ctx)
 
 lk_time_t current_time(void)
 {
-        return ticks;
+  return ticks;
 }
 
 lk_bigtime_t current_time_hires(void)
 {
-        return (lk_bigtime_t)ticks * 1000;
+  return (lk_bigtime_t)ticks * 1000;
 }
 
 void lkl_thread_init(void)
 {
+        struct sigevent sigevp;
+        struct itimerspec ispec;
+        timer_t timerid;
+
         thread_init_early();
         thread_init();
-        timer_init();
         thread_create_idle();
         thread_set_priority(DEFAULT_PRIORITY);
 
-        sigact.sa_sigaction = lkl_timer_callback;
-        sigact.sa_flags = SA_SIGINFO | SA_RESTART;
-        sigemptyset(&sigact.sa_mask);
-        if (sigaction(SIGRTMIN + 1, &sigact, NULL) < 0) {
-                perror("sigaction error");
-                exit(1);
-        }
-
         sigevp.sigev_notify = SIGEV_SIGNAL;
-        sigevp.sigev_signo = SIGRTMIN + 1;
-        if (timer_create(CLOCK_REALTIME, &sigevp, &timerid) < 0) {
-                perror("timer_create error");
-                exit(1);
-        }
+        sigevp.sigev_notify_function = lkl_timer_callback;
+
+        timer_create(CLOCK_REALTIME, &sigevp, &timerid);
 
         ispec.it_interval.tv_sec = LK_INTERVAL / LK_SEC;
         ispec.it_interval.tv_nsec = LK_INTERVAL % LK_SEC;
-        ispec.it_value.tv_sec = 0;
-        ispec.it_value.tv_nsec = 0;
-        if (timer_settime(timerid, 0, &ispec, NULL) < 0) {
-                perror("timer_settime error");
-                exit(1);
-        }
+        ispec.it_value.tv_sec = LK_INTERVAL / LK_SEC;
+        ispec.it_value.tv_nsec = LK_INTERVAL % LK_SEC;
+
+        timer_settime(timerid, 0, &ispec, NULL);
 }
 #endif
 

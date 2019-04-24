@@ -37,6 +37,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <time.h>
+#include <signal.h>
 #include <lk/err.h>
 #include <lk/kernel/thread.h>
 #include <lk/kernel/timer.h>
@@ -881,9 +883,9 @@ enum handler_return thread_timer_tick(void)
 }
 
 /* timer callback to wake up a sleeping thread */
-static enum handler_return thread_sleep_handler(lk_timer_t *timer, lk_time_t now, void *arg)
+static void thread_sleep_handler(union sigval sv)
 {
-    thread_t *t = (thread_t *)arg;
+    thread_t *t = (thread_t *)sv.sival_ptr;
 
     DEBUG_ASSERT(t->magic == THREAD_MAGIC);
     DEBUG_ASSERT(t->state == THREAD_SLEEPING);
@@ -894,8 +896,6 @@ static enum handler_return thread_sleep_handler(lk_timer_t *timer, lk_time_t now
     insert_in_run_queue_head(t);
 
     THREAD_UNLOCK(state);
-
-    return INT_RESCHEDULE;
 }
 
 /**
@@ -910,18 +910,32 @@ static enum handler_return thread_sleep_handler(lk_timer_t *timer, lk_time_t now
  */
 void thread_sleep(lk_time_t delay)
 {
-    lk_timer_t timer;
+    timer_t timer;
 
     thread_t *current_thread = get_current_thread();
+
+    struct sigevent se = {
+        .sigev_notify = SIGEV_THREAD,
+        .sigev_value = {
+            .sival_ptr = (void *)current_thread,
+        },
+        .sigev_notify_function = thread_sleep_handler,
+    };
 
     DEBUG_ASSERT(current_thread->magic == THREAD_MAGIC);
     DEBUG_ASSERT(current_thread->state == THREAD_RUNNING);
     DEBUG_ASSERT(!thread_is_idle(current_thread));
 
-    timer_initialize(&timer);
+    timer_create(CLOCK_REALTIME, &se, &timer);
 
     THREAD_LOCK(state);
-    timer_set_oneshot(&timer, delay, thread_sleep_handler, (void *)current_thread);
+    struct itimerspec ts = {
+        .it_value = {
+            .tv_sec = delay / 1000,
+            .tv_nsec = (delay % 1000) * 1000 * 1000,
+        },
+    };
+    timer_settime(timer, 0, &ts, NULL);
     current_thread->state = THREAD_SLEEPING;
     thread_resched();
     THREAD_UNLOCK(state);
@@ -1220,22 +1234,17 @@ void wait_queue_init(wait_queue_t *wait)
     *wait = (wait_queue_t)WAIT_QUEUE_INITIAL_VALUE(*wait);
 }
 
-static enum handler_return wait_queue_timeout_handler(lk_timer_t *timer, lk_time_t now, void *arg)
+static void wait_queue_timeout_handler(union sigval sv)
 {
-    thread_t *thread = (thread_t *)arg;
+    thread_t *thread = (thread_t *)sv.sival_ptr;
 
     DEBUG_ASSERT(thread->magic == THREAD_MAGIC);
 
     spin_lock(&thread_lock);
 
-    enum handler_return ret = INT_NO_RESCHEDULE;
-    if (thread_unblock_from_wait_queue(thread, ERR_TIMED_OUT) >= NO_ERROR) {
-        ret = INT_RESCHEDULE;
-    }
+    thread_unblock_from_wait_queue(thread, ERR_TIMED_OUT);
 
     spin_unlock(&thread_lock);
-
-    return ret;
 }
 
 /**
@@ -1258,7 +1267,8 @@ static enum handler_return wait_queue_timeout_handler(lk_timer_t *timer, lk_time
  */
 status_t wait_queue_block(wait_queue_t *wait, lk_time_t timeout)
 {
-    lk_timer_t timer;
+    int err;
+    timer_t timer;
 
     thread_t *current_thread = get_current_thread();
 
@@ -1278,15 +1288,32 @@ status_t wait_queue_block(wait_queue_t *wait, lk_time_t timeout)
 
     /* if the timeout is nonzero or noninfinite, set a callback to yank us out of the queue */
     if (timeout != INFINITE_TIME) {
-        timer_initialize(&timer);
-        timer_set_oneshot(&timer, timeout, wait_queue_timeout_handler, (void *)current_thread);
+        struct sigevent se = {
+            .sigev_notify = SIGEV_THREAD,
+            .sigev_value = {
+                .sival_ptr = (void *)current_thread,
+            },
+            .sigev_notify_function = wait_queue_timeout_handler,
+        };
+        err = timer_create(CLOCK_REALTIME, &se, &timer);
+        if (err)
+            return ERR_NOT_VALID;
+        struct itimerspec ts = {
+            .it_value = {
+                .tv_sec = timeout / 1000,
+                .tv_nsec = (timeout % 1000) * 1000 * 1000,
+            },
+        };
+        err = timer_settime(timer, 0, &ts, NULL);
+        if (err)
+            return ERR_NOT_VALID;
     }
 
     thread_resched();
 
     /* we don't really know if the timer fired or not, so it's better safe to try to cancel it */
     if (timeout != INFINITE_TIME) {
-        timer_cancel(&timer);
+        timer_delete(&timer);
     }
 
     return current_thread->wait_queue_block_ret;
