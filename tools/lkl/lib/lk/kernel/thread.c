@@ -78,6 +78,8 @@ static thread_t _idle_thread;
 #define idle_thread(cpu) (&_idle_thread)
 #endif
 
+static struct list_node tls_items;
+
 /* local routines */
 static void thread_resched(void);
 static void idle_thread_routine(void) __NO_RETURN;
@@ -123,6 +125,109 @@ static void init_thread_struct(thread_t *t, const char *name)
 #else
     strlcpy(t->name, name, sizeof(t->name));
 #endif
+}
+
+status_t tls_create(uintptr_t *entry, tls_destructor destructor)
+{
+    if (!entry)
+        return ERR_INVALID_ARGS;
+
+    tls_item_t *tls = malloc(sizeof(tls_item_t));
+    if (!tls)
+        return ERR_NO_RESOURCES;
+    tls->destructor = destructor;
+
+    THREAD_LOCK(state);
+    //thread_t *current_thread = get_current_thread();
+
+    list_add_tail(&tls_items, &tls->node);
+
+    thread_t *t;
+    list_for_every_entry(&thread_list, t, thread_t, thread_list_node) {
+        if (t->state == THREAD_DEATH)
+            continue;
+
+        tls_value_t *tlsval = malloc(sizeof(tls_value_t));
+        if (!tlsval)
+            return ERR_NO_RESOURCES;
+        tlsval->tls = tls;
+        tlsval->data = NULL;
+        list_add_tail(&t->tls_values, &tlsval->node);
+    }
+
+    THREAD_UNLOCK(state);
+
+    *entry = (uintptr_t)tls;
+
+    return NO_ERROR;
+}
+
+status_t tls_delete(uintptr_t entry)
+{
+    thread_t *t;
+    tls_value_t *tlsval;
+    tls_item_t *tls = (void *)entry;
+
+    THREAD_LOCK(state);
+    //thread_t *current_thread = get_current_thread();
+
+    list_for_every_entry(&thread_list, t, thread_t, thread_list_node) {
+        list_for_every_entry(&t->tls_values, tlsval, tls_value_t, node) {
+            if (tlsval->tls == tls) {
+              list_delete(&tlsval->node);
+              free(tlsval);
+              break;
+            }
+        }
+    }
+
+    free(tls);
+
+    THREAD_UNLOCK(state);
+
+    return NO_ERROR;
+}
+
+void *tls_get(uintptr_t entry)
+{
+    thread_t *current_thread = get_current_thread();
+    void *value = NULL;
+
+    THREAD_LOCK(state);
+
+    tls_value_t *tlsval;
+    list_for_every_entry(&current_thread->tls_values, tlsval, tls_value_t, node) {
+        if (tlsval->tls == (void *)entry) {
+            value = tlsval->data;
+            break;
+        }
+    }
+
+    THREAD_UNLOCK(state);
+
+    return value;
+}
+
+status_t tls_set(uintptr_t entry, void *data)
+{
+    status_t status = ERR_NOT_FOUND;
+    thread_t *current_thread = get_current_thread();
+    tls_item_t *tls = (void *)entry;
+    tls_value_t *tlsval;
+
+    THREAD_LOCK(state);
+
+    list_for_every_entry(&current_thread->tls_values, tlsval, tls_value_t, node) {
+        if (tlsval->tls == tls) {
+            tlsval->data = data;
+            status = NO_ERROR;
+            break;
+        }
+    }
+
+    THREAD_UNLOCK(state);
+
+    return status;
 }
 
 /**
@@ -171,6 +276,7 @@ thread_t *thread_create_etc(thread_t *t, const char *name, thread_start_routine 
     t->state = THREAD_SUSPENDED;
     t->blocking_wait_queue = NULL;
     t->wait_queue_block_ret = NO_ERROR;
+    list_initialize(&t->tls_values);
     thread_set_curr_cpu(t, -1);
 
     t->retcode = 0;
@@ -216,10 +322,16 @@ thread_t *thread_create_etc(thread_t *t, const char *name, thread_start_routine 
     t->flags = flags;
 
     /* inheirit thread local storage from the parent */
-    thread_t *current_thread = get_current_thread();
-    int i;
-    for (i=0; i < MAX_TLS_ENTRY; i++)
-        t->tls[i] = current_thread->tls[i];
+    //thread_t *current_thread = get_current_thread();
+    tls_item_t *tls;
+    list_for_every_entry(&tls_items, tls, tls_item_t, node) {
+        tls_value_t *tlsval = malloc(sizeof(tls_value_t));
+        if (!tlsval)
+            return NULL;
+        tlsval->tls = tls;
+        tlsval->data = NULL;
+        list_add_tail(&t->tls_values, &tlsval->node);
+    }
 
     /* set up the initial stack frame */
     arch_thread_initialize(t);
@@ -411,6 +523,22 @@ void thread_exit(int retcode)
 //  dprintf("thread_exit: current %p\n", current_thread);
 
     THREAD_LOCK(state);
+
+    while (!list_is_empty(&current_thread->tls_values)) {
+        tls_value_t *tlsval = list_peek_head_type(&current_thread->tls_values, tls_value_t, node);
+        tls_item_t *tls = tlsval->tls;
+
+        if (tlsval->data && tls->destructor) {
+            void *data = tlsval->data;
+            tlsval->data = NULL;
+            tls->destructor(data);
+        }
+
+        if (tlsval->data == NULL || !tls->destructor) {
+            list_delete(&tlsval->node);
+            free(tlsval);
+        }
+    }
 
     /* enter the dead state */
     current_thread->state = THREAD_DEATH;
@@ -817,6 +945,9 @@ void thread_init_early(void)
     /* initialize the thread list */
     list_initialize(&thread_list);
 
+    /* initialize tls map */
+    list_initialize(&tls_items);
+
     /* create a thread to cover the current running state */
     thread_t *t = malloc(sizeof(thread_t));
     init_thread_struct(t, "bootstrap");
@@ -825,6 +956,7 @@ void thread_init_early(void)
     t->priority = HIGHEST_PRIORITY;
     t->state = THREAD_RUNNING;
     t->flags = THREAD_FLAG_DETACHED;
+    list_initialize(&t->tls_values);
     thread_set_curr_cpu(t, 0);
     thread_set_pinned_cpu(t, 0);
     wait_queue_init(&t->retcode_wait_queue);
@@ -1048,9 +1180,9 @@ void dump_thread(thread_t *t)
 #endif
 #if (MAX_TLS_ENTRY > 0)
     dprintf(INFO, "\ttls:");
-    int i;
-    for (i=0; i < MAX_TLS_ENTRY; i++) {
-        dprintf(INFO, " 0x%lx", t->tls[i]);
+    tls_value_t *tlsval;
+    list_for_every_entry(&t->tls_values, tlsval, tls_value_t, node) {
+        dprintf(INFO, "\t\t%p: %p\n", tlsval->tls, tlsval->data);
     }
     dprintf(INFO, "\n");
 #endif

@@ -72,11 +72,22 @@ struct lkl_sem {
 
 struct lkl_tls_key {
 #ifdef __FIBER__
-        uint key;
+        uintptr_t key;
 #else
 	pthread_key_t key;
 #endif /* __FIBER__ */
 };
+
+#ifdef __FIBER__
+typedef struct {
+  timer_t timer;
+  void (*fn)(void *);
+  void *arg;
+  event_t cond;
+  thread_t thread;
+  int request_stop;
+} ltimer_t;
+#endif
 
 #define WARN_UNLESS(exp) do {						\
 		if (exp < 0)						\
@@ -401,11 +412,16 @@ static int lkl_thread_equal(lkl_thread_t a, lkl_thread_t b)
 #endif /* __FIBER__ */
 }
 
-static struct lkl_tls_key *tls_alloc(void (*destructor)(void *))
+static struct lkl_tls_key *lkl_tls_alloc(void (*destructor)(void *))
 {
 	struct lkl_tls_key *ret = malloc(sizeof(struct lkl_tls_key));
+    if (!ret)
+        return NULL;
 #ifdef __FIBER__
-        get_current_thread()->tls[ret->key] = (uintptr_t)ret;
+    if (!tls_create(&ret->key, destructor)) {
+        free(ret);
+        return NULL;
+    }
 #else
 	if (WARN_PTHREAD(pthread_key_create(&ret->key, destructor))) {
 		free(ret);
@@ -415,20 +431,21 @@ static struct lkl_tls_key *tls_alloc(void (*destructor)(void *))
 	return ret;
 }
 
-static void tls_free(struct lkl_tls_key *key)
+static void lkl_tls_free(struct lkl_tls_key *key)
 {
 #ifdef __FIBER__
-        get_current_thread()->tls[key->key] = (uintptr_t)NULL;
+    tls_delete(key->key);
 #else
 	WARN_PTHREAD(pthread_key_delete(key->key));
 #endif /* __FIBER__ */
 	free(key);
 }
 
-static int tls_set(struct lkl_tls_key *key, void *data)
+static int lkl_tls_set(struct lkl_tls_key *key, void *data)
 {
 #ifdef __FIBER__
-        get_current_thread()->tls[key->key] = (uintptr_t)data;
+    if (!tls_set(key->key, data))
+        return -1;
 #else
 	if (WARN_PTHREAD(pthread_setspecific(key->key, data)))
 		return -1;
@@ -436,10 +453,10 @@ static int tls_set(struct lkl_tls_key *key, void *data)
 	return 0;
 }
 
-static void *tls_get(struct lkl_tls_key *key)
+static void *lkl_tls_get(struct lkl_tls_key *key)
 {
 #ifdef __FIBER__
-        return (void *)get_current_thread()->tls[key->key];
+    return tls_get(key->key);
 #else
 	return pthread_getspecific(key->key);
 #endif /* __FIBER__ */
@@ -567,10 +584,10 @@ struct lkl_host_operations lkl_host_ops = {
 	.mutex_free = lkl_mutex_free,
 	.mutex_lock = lkl_mutex_lock,
 	.mutex_unlock = lkl_mutex_unlock,
-	.tls_alloc = tls_alloc,
-	.tls_free = tls_free,
-	.tls_set = tls_set,
-	.tls_get = tls_get,
+	.tls_alloc = lkl_tls_alloc,
+	.tls_free = lkl_tls_free,
+	.tls_set = lkl_tls_set,
+	.tls_get = lkl_tls_get,
 	.time = time_ns,
 	.timer_alloc = lkl_timer_alloc,
 	.timer_set_oneshot = lkl_timer_set_oneshot,
