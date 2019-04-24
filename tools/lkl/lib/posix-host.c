@@ -546,6 +546,11 @@ static long _gettid(void)
 #endif /* __FIBER__ */
 }
 
+static void lkl_idle_loop_callback(void)
+{
+  thread_yield();
+}
+
 struct lkl_host_operations lkl_host_ops = {
 	.panic = lkl_panic,
 	.thread_create = lkl_thread_create,
@@ -579,6 +584,7 @@ struct lkl_host_operations lkl_host_ops = {
 	.gettid = _gettid,
 	.jmp_buf_set = jmp_buf_set,
 	.jmp_buf_longjmp = jmp_buf_longjmp,
+    .idle_loop_callback = lkl_idle_loop_callback,
 };
 
 static int fd_get_capacity(struct lkl_disk disk, unsigned long long *res)

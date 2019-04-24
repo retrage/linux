@@ -207,6 +207,11 @@ void arch_cpu_idle(void)
 
 	/* switch to idle_host_task */
 	wakeup_idle_host_task();
+
+    /* some systems don't have an external scheduler */
+	if (lkl_ops->idle_loop_callback) {
+		lkl_ops->idle_loop_callback();
+    }
 }
 
 int lkl_cpu_init(void)
