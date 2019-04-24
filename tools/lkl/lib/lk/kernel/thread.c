@@ -320,6 +320,9 @@ thread_t *thread_create_etc(thread_t *t, const char *name, thread_start_routine 
 
     t->stack_size = stack_size;
 
+    /* set up the initial stack frame */
+    arch_thread_initialize(t);
+
     /* save whether or not we need to free the thread struct and/or stack */
     t->flags = flags;
 
@@ -334,9 +337,6 @@ thread_t *thread_create_etc(thread_t *t, const char *name, thread_start_routine 
         tlsval->data = NULL;
         list_add_tail(&t->tls_values, &tlsval->node);
     }
-
-    /* set up the initial stack frame */
-    arch_thread_initialize(t);
 
     /* add it to the global thread list */
     THREAD_LOCK(state);

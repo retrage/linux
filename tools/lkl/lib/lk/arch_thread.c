@@ -22,6 +22,9 @@ static void initial_thread_func(void)
 }
 
 void arch_thread_initialize(struct thread* t) {
+    t->arch.spinlock_data.old_ints_state = -1;
+    t->arch.spinlock_data.old_ints_is_valid = false;
+
     // init context
     getcontext(&t->arch.context);
 
@@ -47,6 +50,11 @@ void arch_idle(void) {
 
 void arch_dump_thread(thread_t *t) {
 
+}
+
+spinlock_thread_data *get_current_spinlock_thread_data(void)
+{
+    return &(get_current_thread()->arch.spinlock_data);
 }
 
 #if 0

@@ -22,6 +22,10 @@
  */
 #pragma once
 
+#include <lk/assert.h>
+#include <lk/arch/thread.h>
+#include <lk/arch/arch_thread.h>
+
 __BEGIN_CDECLS;
 
 extern int ints_enabled;
@@ -29,11 +33,21 @@ extern int fiqs_enabled;
 
 static inline void arch_enable_ints(void)
 {
+    spinlock_thread_data *t = get_current_spinlock_thread_data();
+
+    ASSERT(t->old_ints_is_valid);
+    t->old_ints_is_valid = false;
+    t->old_ints_state = 0;
     ints_enabled = 1;
 }
 
 static inline void arch_disable_ints(void)
 {
+    spinlock_thread_data *t = get_current_spinlock_thread_data();
+
+    ASSERT(!t->old_ints_is_valid);
+    t->old_ints_state = 1;
+    t->old_ints_is_valid = true;
     ints_enabled = 0;
 }
 

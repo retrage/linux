@@ -30,5 +30,6 @@ struct thread;
 
 void arch_thread_initialize(struct thread *);
 void arch_context_switch(struct thread *oldthread, struct thread *newthread);
+spinlock_thread_data *get_current_spinlock_thread_data(void);
 
 #endif
