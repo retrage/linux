@@ -4,6 +4,7 @@
 #include <lk/kernel/thread.h>
 #include <lk/kernel/event.h>
 #include <lk/kernel/timer.h>
+#include <lk/lib/dpc.h>
 #else
 #include <pthread.h>
 #endif
@@ -315,6 +316,7 @@ void lkl_thread_init(void)
 
         thread_init_early();
         thread_init();
+        dpc_init();
         thread_create_idle();
         thread_set_priority(DEFAULT_PRIORITY);
 

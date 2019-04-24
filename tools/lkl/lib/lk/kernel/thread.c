@@ -44,6 +44,7 @@
 #include <lk/kernel/timer.h>
 #include <lk/kernel/debug.h>
 #include <lk/kernel/mp.h>
+#include <lk/lib/dpc.h>
 #include <lk/lib/heap.h>
 #if WITH_KERNEL_VM
 #include <lk/kernel/vm.h>
@@ -91,6 +92,11 @@ lk_bigtime_t current_time_hires(void);
 /* preemption timer */
 static lk_timer_t preempt_timer[SMP_MAX_CPUS];
 #endif
+
+static void dpc_heap_free_cb(void *arg)
+{
+    free(arg);
+}
 
 /* run queue manipulation */
 static void insert_in_run_queue_head(thread_t *t)
@@ -556,14 +562,14 @@ void thread_exit(int retcode)
 
         /* free its stack and the thread structure itself */
         if (current_thread->flags & THREAD_FLAG_FREE_STACK && current_thread->stack) {
-            heap_delayed_free(current_thread->stack);
+            dpc_queue(dpc_heap_free_cb, current_thread->stack, DPC_FLAG_NORESCHED);
 
             /* make sure its not going to get a bounds check performed on the half-freed stack */
             current_thread->flags &= ~THREAD_FLAG_DEBUG_STACK_BOUNDS_CHECK;
         }
 
         if (current_thread->flags & THREAD_FLAG_FREE_STRUCT)
-            heap_delayed_free(current_thread);
+            dpc_queue(dpc_heap_free_cb, current_thread, DPC_FLAG_NORESCHED);
     } else {
         /* signal if anyone is waiting */
         wait_queue_wake_all(&current_thread->retcode_wait_queue, false, 0);

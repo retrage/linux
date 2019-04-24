@@ -10,6 +10,7 @@ liblkl-$(LKL_HOST_CONFIG_POSIX) += posix-host.o
 liblkl-$(LKL_HOST_CONFIG_NT) += nt-host.o
 liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/arch_thread.o
 liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/debug.o
+liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/dpc.o
 liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/heap.o
 liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/kernel/event.o
 liblkl-$(LKL_HOST_CONFIG_FIBER) += lk/kernel/mutex.o
