@@ -554,7 +554,9 @@ static long _gettid(void)
 
 static void lkl_idle_loop_callback(void)
 {
+#ifdef __FIBER__
   thread_yield();
+#endif /* __FIBER__ */
 }
 
 struct lkl_host_operations lkl_host_ops = {
