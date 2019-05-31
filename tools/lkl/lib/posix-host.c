@@ -325,8 +325,8 @@ void lkl_thread_init(void)
 
         ispec.it_interval.tv_sec = LK_INTERVAL / LK_SEC;
         ispec.it_interval.tv_nsec = LK_INTERVAL % LK_SEC;
-        ispec.it_value.tv_sec = 0;
-        ispec.it_value.tv_nsec = 0;
+        ispec.it_value.tv_sec = LK_INTERVAL / LK_SEC;
+        ispec.it_value.tv_nsec = LK_INTERVAL % LK_SEC;
         if (timer_settime(timerid, 0, &ispec, NULL) < 0) {
                 perror("timer_settime error");
                 exit(1);
