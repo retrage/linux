@@ -8,6 +8,22 @@ define set_autoconf_var
   export LKL_HOST_CONFIG_$(1)=$(2)
 endef
 
+define set_output_format
+  $(eval output_format=$(shell $(LD) -r -print-output-format))
+  $(if $(output_format),,$(if $(shell $(CC) --version 2>&1 | grep clang),$(eval \
+	      triple=$(shell $(CC) --version 2>&1 | grep Target | cut -d " " -f2)),$(eval \
+		  triple=$(shell $(CC) -dumpmachine))))
+  $(eval arch=$(shell echo $(triple) | cut -d - -f1))
+  $(eval vendor=$(shell echo $(triple) | cut -d - -f2))
+  $(eval os=$(shell echo $(triple) | cut -d - -f3))
+  $(if $(filter linux,$(vendor)),$(eval os=$(vendor)))
+  $(if $(filter x86_64,$(arch)),$(if $(filter linux,$(os)),$(eval \
+	  output_format=elf64-x86-64)))
+  $(if $(filter i386 i686,$(arch)),$(if $(filter linux,$(os)),$(eval \
+	  output_format=elf32-i386)))
+  $(1) := $$(output_format)
+endef
+
 define find_include
   $(eval include_paths=$(shell $(CC) -E -Wp,-v -xc /dev/null 2>&1 | grep '^ '))
   $(foreach f, $(include_paths), $(wildcard $(f)/$(1)))
@@ -98,7 +114,7 @@ define do_autoconf
   export AR := $(CROSS_COMPILE)ar
   $(eval LD := $(CROSS_COMPILE)ld)
   $(eval CC := $(CROSS_COMPILE)gcc)
-  $(eval LD_FMT := $(shell $(LD) -r -print-output-format))
+  $(eval $(call set_output_format,LD_FMT))
   $(eval EXEC_FMT := $(shell echo $(LD_FMT) | cut -d "-" -f1))
   $(if $(filter $(EXEC_FMT),$(POSIX_HOSTS)),$(call posix_host,$(LD_FMT)))
   $(if $(filter $(EXEC_FMT),$(NT_HOSTS)),$(call nt_host,$(LD_FMT)))
