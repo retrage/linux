@@ -106,6 +106,22 @@ jobs:
      CROSS_COMPILE: ""
    <<: *do_steps
 
+  clang-lld-x86_64:
+   docker:
+     - image: lkldocker/circleci-clang-x86_64:0.1
+   environment:
+     CROSS_COMPILE: ""
+     MKARG: "CC=clang LD=ld.lld dpdk=no"
+   <<: *do_steps
+
+  clang-lld-i386:
+   docker:
+     - image: lkldocker/circleci-clang-i386:0.1
+   environment:
+     CROSS_COMPILE: ""
+     MKARG: "CC=clang LD=ld.lld"
+   <<: *do_steps
+
   mingw32:
    docker:
      - image: lkldocker/circleci-mingw:0.6
@@ -173,6 +189,8 @@ workflows:
      - freebsd11_x86_64
      - checkpatch
      - i386
+     - clang-lld-x86_64
+     - clang-lld-i386
   nightly:
     triggers:
       - schedule:
