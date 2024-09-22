@@ -7,3 +7,8 @@ liblkl-zpoline-y += zpoline.o
 liblkl-zpoline-y += hijack.o
 liblkl-zpoline-y += init.o
 liblkl-zpoline-y += xlate.o
+
+liblkl-svchook-y += svchook.o
+liblkl-svchook-y += hijack.o
+liblkl-svchook-y += init.o
+liblkl-svchook-y += xlate.o

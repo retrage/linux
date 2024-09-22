@@ -68,6 +68,11 @@ define zpoline_conf
   $(if $(strip $(foreach f, $(zpoline_dir), $(wildcard $(f)/libzpoline.so))),$(call set_autoconf_var,ZPOLINE_DIR,$(zpoline_dir)))
 endef
 
+define svchook_conf
+  $(eval svchook_dir=$(abspath $(srctree)/$(1)))
+  $(if $(strip $(foreach f, $(svchook_dir), $(wildcard $(f)/libsvchook.so))),$(call set_autoconf_var,SVCHOOK_DIR,$(svchook_dir)))
+endef
+
 define posix_host
   $(call set_autoconf_var,POSIX,y)
   $(call set_autoconf_var,VIRTIO_NET,y)
@@ -89,6 +94,7 @@ define posix_host
   $(if $(filter $(1),elf32-i386),$(call set_autoconf_var,I386,y))
   $(if $(strip $(call find_include,jsmn.h)),$(call set_autoconf_var,JSMN,y))
   $(if $(filter %,$(zpoline)),$(call zpoline_conf,$(zpoline)))
+  $(if $(filter %,$(svchook)),$(call svchook_conf,$(svchook)))
 endef
 
 define nt64_host

@@ -25,7 +25,7 @@ fi
 if [ -n "${LKL_HIJACK_ZPOLINE}" ]
 then
     export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${LKL_HOST_CONFIG_ZPOLINE_DIR}
-    LD_PRELOAD=libzpoline.so LIBZPHOOK=liblkl-zpoline.so $*
+    LD_PRELOAD=/mnt/work/src/svc-hook/libsvchook.so LIBSVCHOOK=liblkl-svchook.so $*
 else
     LD_PRELOAD=liblkl-hijack.so $*
 fi
