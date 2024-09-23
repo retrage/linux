@@ -240,12 +240,21 @@ int fcntl(int fd, int cmd, ...)
 	return lkl_call(__lkl__NR_fcntl, 3, fd, lkl_fcntl_cmd_xlate(cmd), arg);
 }
 
-HOST_CALL(poll);
 int hijack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 {
-	unsigned int i, lklfds = 0, hostfds = 0;
+	return hijack_ppoll(fds, nfds, timeout >= 0 ?
+				&((struct timespec){ .tv_sec = timeout/1000,
+				.tv_nsec = timeout%1000*1000000 }) : 0, NULL);
+}
 
-	CHECK_HOST_CALL(poll);
+HOST_CALL(ppoll);
+int hijack_ppoll(struct pollfd *fds, nfds_t nfds,
+		const struct timespec *timeout_ts, const sigset_t *sigmask)
+{
+	unsigned int i, lklfds = 0, hostfds = 0;
+	struct lkl_timespec ts;
+
+	CHECK_HOST_CALL(ppoll);
 
 	for (i = 0; i < nfds; i++) {
 		if (is_lklfd(fds[i].fd))
@@ -260,32 +269,50 @@ int hijack_poll(struct pollfd *fds, nfds_t nfds, int timeout)
 
 
 	if (hostfds)
-		return host_poll(fds, nfds, timeout);
+		return host_ppoll(fds, nfds, timeout_ts, sigmask);
 
-	return lkl_sys_poll((struct lkl_pollfd *)fds, nfds, timeout);
+	if (timeout_ts) {
+		ts.tv_sec = timeout_ts->tv_sec;
+		ts.tv_nsec = timeout_ts->tv_nsec;
+	}
+
+	return lkl_sys_ppoll((struct lkl_pollfd *)fds, nfds, timeout_ts ? (struct __lkl__kernel_timespec *)&ts : NULL, (lkl_sigset_t *)sigmask, _LKL_NSIG/8);
 }
 
-HOST_CALL(select);
-int hijack_select(int nfds, fd_set *r, fd_set *w, fd_set *e, struct timeval *t)
+int hijack_select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout)
+{
+	struct timespec ts = {};
+	if (timeout) {
+		ts.tv_sec = timeout->tv_sec;
+		ts.tv_nsec = timeout->tv_usec * 1000;
+	}
+	return hijack_pselect(nfds, readfds, writefds, exceptfds, timeout ? &ts : NULL, NULL);
+}
+
+HOST_CALL(pselect);
+int hijack_pselect(int nfds, fd_set *readfds, fd_set *writefds,
+		  fd_set *exceptfds, const struct timespec *timeout, const sigset_t *sigmask)
 {
 	int fd, hostfds = 0, lklfds = 0;
+	struct lkl_timespec ts;
+	long data[2] = { 0, _LKL_NSIG/8 };
 
-	CHECK_HOST_CALL(select);
+	CHECK_HOST_CALL(pselect);
 
 	for (fd = 0; fd < nfds; fd++) {
-		if (r != 0 && FD_ISSET(fd, r)) {
+		if (readfds != 0 && FD_ISSET(fd, readfds)) {
 			if (is_lklfd(fd))
 				lklfds = 1;
 			else
 				hostfds = 1;
 		}
-		if (w != 0 && FD_ISSET(fd, w)) {
+		if (writefds != 0 && FD_ISSET(fd, writefds)) {
 			if (is_lklfd(fd))
 				lklfds = 1;
 			else
 				hostfds = 1;
 		}
-		if (e != 0 && FD_ISSET(fd, e)) {
+		if (exceptfds != 0 && FD_ISSET(fd, exceptfds)) {
 			if (is_lklfd(fd))
 				lklfds = 1;
 			else
@@ -298,10 +325,19 @@ int hijack_select(int nfds, fd_set *r, fd_set *w, fd_set *e, struct timeval *t)
 		return lkl_set_errno(-LKL_EOPNOTSUPP);
 
 	if (hostfds)
-		return host_select(nfds, r, w, e, t);
+		return host_pselect(nfds, readfds, writefds, exceptfds, timeout, sigmask);
 
-	return lkl_sys_select(nfds, (lkl_fd_set *)r, (lkl_fd_set *)w,
-			      (lkl_fd_set *)e, (struct lkl_timeval *)t);
+	if (timeout) {
+		ts.tv_sec = timeout->tv_sec;
+		ts.tv_nsec = timeout->tv_nsec;
+	}
+
+	if (sigmask) {
+		data[0] = (long)sigmask;
+	}
+
+	return lkl_sys_pselect6(nfds, (lkl_fd_set *)readfds, (lkl_fd_set *)writefds,
+				(lkl_fd_set *)exceptfds, timeout? (struct __lkl__kernel_timespec *)&ts : NULL, data);
 }
 
 HOST_CALL(close);
@@ -384,18 +420,26 @@ struct epollarg {
 	struct epoll_event *events;
 	int maxevents;
 	int timeout;
+	sigset_t *sigmask;
 	int pipefd;
 	int errnum;
 };
 
-HOST_CALL(epoll_wait)
-static void *host_epollwait(void *arg)
+int hijack_epoll_wait(int epfd, struct epoll_event *events,
+	       int maxevents, int timeout)
+{
+	return hijack_epoll_pwait(epfd, events, maxevents, timeout, NULL);
+}
+
+HOST_CALL(epoll_pwait)
+static void *host_epollpwait(void *arg)
 {
 	struct epollarg *earg = arg;
 	int ret;
 
-	ret = host_epoll_wait(earg->epfd, earg->events,
-			      earg->maxevents, earg->timeout);
+	ret = host_epoll_pwait(earg->epfd, earg->events,
+			      earg->maxevents, earg->timeout,
+				  earg->sigmask);
 	if (ret == -1)
 		earg->errnum = errno;
 	lkl_call(__lkl__NR_write, 3, earg->pipefd, &ret, sizeof(ret));
@@ -403,10 +447,11 @@ static void *host_epollwait(void *arg)
 	return (void *)(intptr_t)ret;
 }
 
-int hijack_epoll_wait(int epfd, struct epoll_event *events,
-	       int maxevents, int timeout)
+int hijack_epoll_pwait(int epfd, struct epoll_event *events,
+				int maxevents, int timeout,
+				const sigset_t *sigmask)
 {
-	CHECK_HOST_CALL(epoll_wait);
+	CHECK_HOST_CALL(epoll_pwait);
 	CHECK_HOST_CALL(pipe2);
 
 	int l_pipe[2] = {-1, -1}, h_pipe[2] = {-1, -1};
@@ -465,12 +510,13 @@ int hijack_epoll_wait(int epfd, struct epoll_event *events,
 	earg.events = h_events;
 	earg.maxevents = maxevents;
 	earg.timeout = timeout;
+	earg.sigmask = (sigset_t *)sigmask;
 	earg.pipefd = l_pipe[1];
-	pthread_create(&thread, NULL, host_epollwait, &earg);
+	pthread_create(&thread, NULL, host_epollpwait, &earg);
 
-	ret_lkl = lkl_sys_epoll_wait(dual_fds[epfd],
+	ret_lkl = lkl_sys_epoll_pwait(dual_fds[epfd],
 				     (struct lkl_epoll_event *)l_events,
-				     maxevents, timeout);
+				     maxevents, timeout, (const lkl_sigset_t *)sigmask, _LKL_NSIG/8); // TODO
 	if (ret_lkl == -1) {
 		fprintf(stderr,
 			"lkl_%s_wait error(epfd=%d:%d, fd=%d, err=%d)\n",
