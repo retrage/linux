@@ -120,10 +120,16 @@ long zpoline_lkl_hook(int64_t a1, int64_t a2, int64_t a3,
 		return hijack_epoll_ctl(a2, a3, a4, (void *)a5);
 	case __NR_epoll_wait:
 		return hijack_epoll_wait(a2, (void *)a3, a4, a5);
+	case __NR_epoll_pwait:
+		return hijack_epoll_pwait(a2, (void *)a3, a4, a5, (void *)a6);
 	case __NR_poll:
 		return hijack_poll((void *)a2, a3, a4);
+	case __NR_ppoll:
+		return hijack_ppoll((void *)a2, a3, (void *)a4, (void *)a5);
 	case __NR_select:
 		return hijack_select(a2, (void *)a3, (void *)a4, (void *)a5, (void *)a6);
+	case __NR_pselect6:
+		return hijack_pselect(a2, (void *)a3, (void *)a4, (void *)a5, (void *)a6, (void *)a7);
 	case __NR_eventfd2:
 		return hijack_eventfd(a2, a3);
 	case __NR_futex:
